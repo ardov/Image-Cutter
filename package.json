@@ -1,0 +1,14 @@
+{
+  "name": "image-slicer",
+  "version": "1.0.0",
+  "description": "Cut image in slices with ease",
+  "main": "code.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "author": "Alexey Ardov",
+  "license": "",
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.16.1"
+  }
+}
