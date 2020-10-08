@@ -7,7 +7,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "author": "Alexey Ardov",
-  "license": "",
+  "license": "MIT",
   "devDependencies": {
     "@figma/plugin-typings": "^1.16.1"
   }
