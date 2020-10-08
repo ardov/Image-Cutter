@@ -1,5 +1,5 @@
 {
-  "name": "image-slicer",
+  "name": "image-cutter",
   "version": "1.0.0",
   "description": "Cut image in slices with ease",
   "main": "code.js",
