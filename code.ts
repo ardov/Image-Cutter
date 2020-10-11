@@ -23,11 +23,12 @@ function isFillable(node: SceneNode): node is FillableNode {
 
 const nodes = selectedNodes.filter(isFillable);
 
+// Detect main image in selection. It is the biggest node with IMAGE fill
 const img = nodes.reduce((main, node) => {
   if (node.fills[0]?.type !== "IMAGE") return main;
   if (isFillable(main)) {
-    let mainSqr = main.width * main.height;
-    let nodeSqr = node.width * node.height;
+    const mainSqr = main.width * main.height;
+    const nodeSqr = node.width * node.height;
     return nodeSqr > mainSqr ? node : main;
   } else {
     return node;
@@ -39,22 +40,22 @@ if (!img) {
   figma.closePlugin();
 }
 
-// TODO: Check overlapping
-const rects = nodes.filter((node) => node.id !== img.id);
+// Get list of other nodes
+// TODO: Check overlapping with image, otherwise node will be transparent
+const shapes = nodes.filter((node) => node.id !== img.id);
 
-if (!rects.length) {
+if (!shapes.length) {
   figma.notify(`⚠️ Select shapes over the image`);
   figma.closePlugin();
 }
 
-rects.forEach((rect) => copyFill(img, rect));
-figma.notify(`✅ ${rects.length} slice(s) ready`);
-
-// Make sure to close the plugin when you're done. Otherwise the plugin will
-// keep running, which shows the cancel button at the bottom of the screen.
+shapes.forEach((shape) => copyFill(img, shape));
+figma.notify(`✅ ${shapes.length} slice(s) ready`);
 figma.closePlugin();
 
-function copyFill(img: FillableNode, node: FillableNode) {
+// Helper functions
+
+function copyFill(img: FillableNode, node: FillableNode): void {
   const absoluteFillPos = addPosition(
     getNodePosition(img),
     getFillPosition(img)
@@ -72,6 +73,7 @@ function copyFill(img: FillableNode, node: FillableNode) {
 }
 
 function getFillPosition(node: FillableNode): Pos {
+  // FIT and FILL scale modes treats like not scaled.
   if (node.fills[0].scaleMode !== "CROP")
     return { x: 0, y: 0, sX: 1, sY: 1, rotation: 0 };
   const T = node.fills[0].imageTransform;
@@ -87,26 +89,27 @@ function getFillPosition(node: FillableNode): Pos {
     [0, 1, -h * T[1][2]],
   ] as Transform;
 
-  let [[a, b, x], [c, d, y]] = multiply(rotate, translate);
+  const [[a, b, x], [c, d, y]] = multiply(rotate, translate);
+  const sX = 1 / (Math.sign(a) * Math.sqrt(a * a + c * c));
+  const sY = 1 / (Math.sign(d) * Math.sqrt(b * b + d * d));
+  const rad = Math.asin(b / sX);
 
-  let sX = 1 / (Math.sign(a) * Math.sqrt(a * a + c * c));
-  let sY = 1 / (Math.sign(d) * Math.sqrt(b * b + d * d));
-  let rad = Math.asin(b / sX);
+  // TODO: to support scaled images we need to calc real image size
   if (isNaN(rad)) {
     figma.notify(`⚠️ Scaled images are not supported`);
     figma.closePlugin();
   }
 
-  let rotation = rad / (Math.PI / 180);
+  const rotation = rad / (Math.PI / 180);
   return { x, y, sX, sY, rotation };
 }
 
 function getNodePosition(node: FillableNode): Pos {
-  let [[a, b, x], [c, d, y]] = node.absoluteTransform;
-  let sX = Math.sign(a) * Math.sqrt(a * a + c * c);
-  let sY = Math.sign(d) * Math.sqrt(b * b + d * d);
-  let rad = Math.asin(b / sX);
-  let rotation = rad / (Math.PI / 180);
+  const [[a, b, x], [c, d, y]] = node.absoluteTransform;
+  const sX = Math.sign(a) * Math.sqrt(a * a + c * c);
+  const sY = Math.sign(d) * Math.sqrt(b * b + d * d);
+  const rad = Math.asin(b / sX);
+  const rotation = rad / (Math.PI / 180);
   return { x, y, sX, sY, rotation };
 }
 
@@ -116,8 +119,8 @@ function getFillTransform(from: FillableNode, to: FillableNode): Transform {
   const h1 = from.height;
   const w2 = to.width;
   const h2 = to.height;
-  let sX = to.width / from.width;
-  let sY = to.height / from.height;
+  const sX = to.width / from.width;
+  const sY = to.height / from.height;
   const scale = [
     [sX, 0, 0],
     [0, sY, 0],
@@ -132,8 +135,6 @@ function getFillTransform(from: FillableNode, to: FillableNode): Transform {
   ] as Transform;
   return multiply(scale, rotate, translate);
 }
-
-//  HELPERS
 
 function multiply(...toMultiply: Transform[]): Transform {
   return toMultiply.reduce((t1, t2) => multiplyMatrices(t1, t2));
@@ -179,25 +180,12 @@ function addPosition(pos1: Pos, pos2: Pos): Pos {
     pos1.y + pos2.y,
     pos1.rotation
   );
-  return {
-    x,
-    y,
-    sX: 1,
-    sY: 1,
-    rotation: pos1.rotation + pos2.rotation,
-  };
+  return { x, y, sX: 1, sY: 1, rotation: pos1.rotation + pos2.rotation };
 }
 
 function subPosition(pos1: Pos, pos2: Pos): Pos {
   const [x, y] = rotate(0, 0, pos2.x - pos1.x, pos2.y - pos1.y, -pos1.rotation);
-
-  return {
-    x,
-    y,
-    sX: 1,
-    sY: 1,
-    rotation: pos1.rotation - pos2.rotation,
-  };
+  return { x, y, sX: 1, sY: 1, rotation: pos1.rotation - pos2.rotation };
 }
 
 function createFillTransform(
@@ -205,25 +193,26 @@ function createFillTransform(
   node: FillableNode,
   pos: Pos
 ): Transform {
-  let w = node.width;
-  let h = node.height;
+  const w = node.width;
+  const h = node.height;
   const { x = 0, y = 0, rotation = 0 } = pos;
   const rad = rotation * (Math.PI / 180);
 
-  let sX = node.width / img.width;
-  let sY = node.height / img.height;
+  const sX = node.width / img.width;
+  const sY = node.height / img.height;
 
+  // Don't know why, but it's the way imageTransform works 🤷🏼‍♂️
   const scale = [
     [sX, 0, 0],
     [0, sY, 0],
   ] as Transform;
 
-  let rotate = [
+  const rotate = [
     [Math.cos(rad), (h / w) * Math.sin(rad), 0],
     [-(w / h) * Math.sin(rad), Math.cos(rad), 0],
   ] as Transform;
 
-  let translate = [
+  const translate = [
     [1, 0, x / -w],
     [0, 1, y / -h],
   ] as Transform;
